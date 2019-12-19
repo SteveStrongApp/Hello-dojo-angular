@@ -1,0 +1,31 @@
+<mat-card align="center">
+    <mat-card-title>
+        Are you ready to play?
+    </mat-card-title>
+    <mat-card-content>
+        <br />
+
+        <form class="fields-container" [formGroup]="formData" (ngSubmit)="doStartQuestions()" >
+            <mat-form-field style="text-align:center">
+                <!-- <label for="userName">Username</label> -->
+                <input matInput type="text" placeholder="What is your name?"  (keyup)="doKeyUp($event)" formControlName="userName"
+                    [ngClass]="{ 'is-invalid': submitted && f.userName.errors }" />
+
+                <div *ngIf="submitted && f.userName.errors" class="invalid-feedback">
+                    <div *ngIf="f.userName.errors.required">Username is required</div>
+                    <div *ngIf="f.userName.errors.minlength">
+                        Username must be at least 3 characters
+                    </div>
+                </div>
+            </mat-form-field>
+            <br />
+            <div style="text-align:center">
+                <button mat-raised-button class="buttonStart">
+                    Start
+                </button>
+            </div>
+        </form >
+
+        <!-- {{f.userName.errors | json}} -->
+    </mat-card-content>
+</mat-card>

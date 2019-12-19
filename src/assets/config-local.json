@@ -1,0 +1,6 @@
+{
+    "answerURL": "http://localhost:8080/submitResponse",
+    "featureflags": {
+        "answerservice": false
+    }
+}

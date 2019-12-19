@@ -1,0 +1,10 @@
+node_modules
+Dockerfile
+.gitignore
+.editorconfig
+Jenkinsfile
+pipeline_config.groovy
+*.md
+sonar-project.properties
+charts
+coverage

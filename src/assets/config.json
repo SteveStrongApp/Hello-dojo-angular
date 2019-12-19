@@ -1,0 +1,6 @@
+{
+    "answerURL": "http://localhost:5000/api",
+    "featureflags": {
+        "answerservice": false
+    }
+}

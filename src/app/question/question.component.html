@@ -1,0 +1,19 @@
+<mat-card align="center">
+
+    <mat-card-subtitle>
+        <strong>{{getUser()}}:</strong> Question No. {{current.Id}}  
+    </mat-card-subtitle>
+
+    <mat-card-content>
+        <h1>{{current.question}}</h1>
+    </mat-card-content>
+    <mat-card-actions>
+        <button (click)="doPostTrue()" mat-raised-button class="buttonTrue">True</button>
+        <button (click)="doPostFalse()" mat-raised-button class="buttonFalse">False</button>
+    </mat-card-actions>
+
+    <mat-card-actions>
+
+        <button [routerLink]="['/login']" mat-flat-button class="buttonExit">Finish</button>
+    </mat-card-actions>
+</mat-card>

@@ -1,0 +1,18 @@
+.buttonTrue {
+    background-color: greenyellow;
+    color: black;
+
+    margin-right: 30px !important;
+}
+
+.buttonFalse {
+    background-color: red;
+    color: white;
+
+    margin-left: 30px !important;
+}
+
+.buttonExit {
+    background-color: blue;
+    color: white;
+}

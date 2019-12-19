@@ -1,0 +1,23 @@
+FROM node:latest
+USER root
+
+# Install Chromium
+RUN apt-get update && apt-get install --no-install-recommends --no-install-suggests -y software-properties-common && apt install -y chromium
+ENV CHROME_BIN=chromium
+
+# Create app directory
+ENV APP=/var/www
+RUN mkdir -p $APP
+WORKDIR $APP
+ENV PATH $APP/node_modules/.bin:$PATH
+
+# Install app dependencies
+COPY package.json $APP
+COPY package-lock.json $APP
+
+RUN npm install
+
+# Bundle app source in this experiment the dist should be build
+# already  as well as all node modules
+COPY . $APP
+RUN npm run build_prod  #for now do not trust webpack

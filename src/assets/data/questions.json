@@ -1,0 +1,60 @@
+{
+    "quizTitle": "true facts",
+    "questions": [
+        {
+            "Id": 1,
+            "question": "Earth spins around its axis once a year.",
+            "answer": false
+        },
+        {
+            "Id": 2,
+            "question": "Albert Einstein was not awarded the Nobel Prize in Physics.",
+            "answer": false
+        },
+        {
+            "Id": 3,
+            "question": "The American Civil War ended in 1776.",
+            "answer": false
+        },
+        {
+            "Id": 4,
+            "question": "A right triangle can never be equilateral.",
+            "answer": true
+        },
+        {
+            "Id": 5,
+            "question": "The Bill of Rights contains 10 amendments to the Constitution.",
+            "answer": true
+        },
+        {
+            "Id": 6,
+            "question": "The favorite food of the Teenage Mutant Ninja Turtles is pizza.",
+            "answer": true
+        },
+        {
+            "Id": 7,
+            "question": "Thomas Jefferson was the second president of the United States.",
+            "answer": false
+        },
+        {
+            "Id": 8,
+            "question": "No bird can fly backwards.",
+            "answer": false
+        },
+        {
+            "Id": 9,
+            "question": "If you cry in space the tears just stick to your face.",
+            "answer": true
+        },
+        {
+            "Id": 10,
+            "question": "The top of the Eiffel Tower leans away from the sun.",
+            "answer": true
+        },
+        {
+            "Id": 11,
+            "question": "About half of your body weight is muscle.",
+            "answer": false
+        }
+    ]
+}
