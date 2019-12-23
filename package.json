@@ -10,7 +10,12 @@
     "test-forever": "ng test --watch=true --browsers=ChromeHeadless",
     "test": "ng test",
     "lint": "ng lint",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e",
+    "aws:cfm:create-repository-stack": "./infrastructure/scripts/create_ecr_repository.sh",
+    "aws:ecr:build-and-push-image": "./infrastructure/scripts/build_and_push_docker_image.sh",
+    "aws:cfm:deploy-service": "./infrastructure/scripts/deploy_service.sh",
+    "aws:cfm:deploy-web": "./infrastructure/scripts/deploy_web.sh",
+    "aws:cfm:get-urls": "./infrastructure/scripts/get_urls.sh"
   },
   "private": true,
   "dependencies": {

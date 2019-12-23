@@ -1,0 +1,87 @@
+Description: >
+  Template to create an S3 bucket and cloudfront distribution to serve
+  static content for a website from the S3 bucket.
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Description: The name of the application served by this stack
+    Default: hello-dojo-web
+
+Resources:
+  WebSiteCloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        DefaultCacheBehavior:
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          Compress: true
+          DefaultTTL: 1800
+          ForwardedValues:
+            Cookies:
+              Forward: all
+            QueryString: true
+          MaxTTL: 2000
+          MinTTL: 300
+          TargetOriginId: website-bucket-origin
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        Enabled: "true"
+        Origins:
+          - S3OriginConfig:
+              OriginAccessIdentity: !Join
+                - ""
+                - - origin-access-identity/cloudfront/
+                  - !Ref WebSiteS3OriginAccessIdentity
+            DomainName: !GetAtt [WebSiteS3Bucket, DomainName]
+            Id: website-bucket-origin
+        PriceClass: PriceClass_100
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+
+  WebSiteS3OriginAccessIdentity:
+    Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
+    Properties:
+      CloudFrontOriginAccessIdentityConfig:
+        Comment: WebApp S3 Bucket Origin Access Identity
+
+  WebSiteS3BucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref "WebSiteS3Bucket"
+      PolicyDocument:
+        Id: BucketPolicy
+        Statement:
+          - Action: s3:GetObject
+            Effect: Allow
+            Principal:
+              AWS: !Join
+                - ""
+                - - "arn:aws:iam::cloudfront:user/CloudFront Origin Access Identity "
+                  - !Ref WebSiteS3OriginAccessIdentity
+            Resource: !Join
+              - ""
+              - - "arn:aws:s3:::"
+                - !Ref "WebSiteS3Bucket"
+                - /*
+            Sid: PublicReadForGetBucketObjcets
+        Version: "2012-10-17"
+
+  WebSiteS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      AccessControl: Private
+      Tags:
+        - Key: Application
+          Value: !Ref ApplicationName
+
+Outputs:
+  S3WebsiteBucketName:
+    Description: The bucket name housing the website
+    Value: !Ref WebSiteS3Bucket
