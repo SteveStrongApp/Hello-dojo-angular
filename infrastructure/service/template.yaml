@@ -8,6 +8,7 @@ Parameters:
     Type: String
     Description: The url of a docker image that contains the application process that
       will handle the traffic for this service.
+    Default: ''
   ServiceName:
     Type: String
     Description: A name for the service.
@@ -55,6 +56,7 @@ Parameters:
 
 Conditions:
   HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
+  HasImageUrl: !Not [ !Equals [!Ref 'ImageUrl', ''] ]
 
 Mappings:
   # Hard values for the subnet masks. These masks define
@@ -82,6 +84,28 @@ Mappings:
     PrivateTwo:
       CIDR: '10.0.3.0/24'
 Resources:
+
+  ECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${AWS::StackName}'
+      RepositoryPolicyText:
+        Version: '2008-10-17'
+        Statement:
+          - Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:BatchCheckLayerAvailability
+              - ecr:PutImage
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+
   # VPC in which containers will be networked.
   # It has two public subnets, and two private subnets.
   # We distribute the subnets across the first two available subnets
@@ -224,7 +248,7 @@ Resources:
       RouteTableId: !Ref PrivateRouteTableTwo
       SubnetId: !Ref PrivateSubnetTwo
 
-  # ECS Resources
+ # ECS Resources
   ECSCluster:
     Type: AWS::ECS::Cluster
 
@@ -272,6 +296,7 @@ Resources:
         # Allow access to ALB from anywhere on the internet
         - CidrIp: 0.0.0.0/0
           IpProtocol: -1
+
   PublicLoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -285,6 +310,7 @@ Resources:
         - !Ref 'PublicSubnetOne'
         - !Ref 'PublicSubnetTwo'
       SecurityGroups: [!Ref 'PublicLoadBalancerSG']
+
   # A dummy target group is used to setup the ALB to just drop traffic
   # initially, before any real service target groups have been added.
   DummyTargetGroupPublic:
@@ -300,6 +326,7 @@ Resources:
       Protocol: HTTP
       UnhealthyThresholdCount: 2
       VpcId: !Ref 'VPC'
+
   PublicLoadBalancerListener:
     Type: AWS::ElasticLoadBalancingV2::Listener
     DependsOn:
@@ -382,11 +409,12 @@ Resources:
   LogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
-      LogGroupName: !Join ['', [/ecs/, !Ref ServiceName, TaskDefinition]]
+      LogGroupName: !Join ['', [/ecs/, !Ref ServiceName]]
 
   # The task definition. This is a simple metadata description of what
   # container to run, and what resource requirements it has.
   TaskDefinition:
+    Condition: HasImageUrl
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: !Ref 'ServiceName'
@@ -405,7 +433,7 @@ Resources:
         - Name: !Ref 'ServiceName'
           Cpu: !Ref 'ContainerCpu'
           Memory: !Ref 'ContainerMemory'
-          Image: !Ref 'ImageUrl'
+          Image: !Ref ImageUrl
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -419,6 +447,7 @@ Resources:
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
   Service:
+    Condition: HasImageUrl
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
@@ -474,3 +503,19 @@ Resources:
           Values: [!Ref 'Path']
       ListenerArn: !Ref 'PublicLoadBalancerListener'
       Priority: !Ref 'Priority'
+
+
+Outputs:
+  RepositoryName:
+    Description: The name of the ECR repository housing the docker images for the service
+    Value: !Ref ECR
+  DNSName:
+    Description: The DNSName of the public loadbalancer
+    Value: !GetAtt PublicLoadBalancer.DNSName
+  ECSClusterName:
+    Description: The name of the ECS Cluster
+    Value: !Ref ECSCluster
+  ECSServiceName:
+    Condition: HasImageUrl
+    Description: The name of the ECS Service
+    Value: !GetAtt Service.Name

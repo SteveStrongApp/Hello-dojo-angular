@@ -2,13 +2,8 @@ Description: >
   Template to create an S3 bucket and cloudfront distribution to serve
   static content for a website from the S3 bucket.
 
-Parameters:
-  ApplicationName:
-    Type: String
-    Description: The name of the application served by this stack
-    Default: hello-dojo-web
-
 Resources:
+
   WebSiteCloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -41,9 +36,6 @@ Resources:
             DomainName: !GetAtt [WebSiteS3Bucket, DomainName]
             Id: website-bucket-origin
         PriceClass: PriceClass_100
-      Tags:
-        - Key: Application
-          Value: !Ref ApplicationName
 
   WebSiteS3OriginAccessIdentity:
     Type: AWS::CloudFront::CloudFrontOriginAccessIdentity
@@ -77,11 +69,14 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       AccessControl: Private
-      Tags:
-        - Key: Application
-          Value: !Ref ApplicationName
 
 Outputs:
-  S3WebsiteBucketName:
-    Description: The bucket name housing the website
+  WebsiteBucketName:
+    Description: The S3 bucket name containing the website source files
     Value: !Ref WebSiteS3Bucket
+  DNSName:
+    Description: The domain name of the website from the cloudfront distribution
+    Value: !GetAtt WebSiteCloudFrontDistribution.DomainName
+  CloudFrontDistribution:
+    Description: The cloudfront distribution
+    Value: !Ref WebSiteCloudFrontDistribution
