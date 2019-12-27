@@ -12,11 +12,13 @@
     "lint": "ng lint",
     "e2e": "ng e2e",
     "aws:cfm:bootstrap": "./infrastructure/scripts/bootstrap.sh",
+    "aws:s3:push-source": "./infrastructure/scripts/push_source.sh",
     "aws:ecr:build-and-push-image": "./infrastructure/scripts/build_and_push_docker_image.sh",
     "aws:cfm:deploy-service": "./infrastructure/scripts/deploy_service.sh",
-    "aws:cfm:deploy-web": "./infrastructure/scripts/deploy_web.sh",
-    "aws:cfm:get-urls": "./infrastructure/scripts/get_urls.sh",
-    "aws:cfm:teardown": "./infrastructure/scripts/remove_stack.sh"
+    "aws:cfm:get-url": "./infrastructure/scripts/get_loadbalancer_url.sh",
+    "aws:cfm:teardown-pipeline": "./infrastructure/scripts/remove_pipeline_stack.sh",
+    "aws:cfm:teardown-app": "./infrastructure/scripts/remove_application_stack.sh"
+
   },
   "private": true,
   "dependencies": {

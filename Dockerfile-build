@@ -1,0 +1,19 @@
+FROM node:latest AS builder
+ENV APP=/var/www
+
+#RUN apt-get update # && app-get install -y curl
+
+# Create app directory
+RUN mkdir -p $APP
+WORKDIR $APP
+
+# Install app dependencies
+COPY package*.json $APP/
+
+RUN npm install
+#RUN npm rebuild node-sass
+
+# Bundle app source in this experiment the dist should be build
+# already  as well as all node modules
+COPY . $APP
+RUN npm run lint

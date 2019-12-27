@@ -1,0 +1,18 @@
+FROM node:latest AS builder
+ENV APP=/var/www
+
+# Create app directory
+RUN mkdir -p $APP
+WORKDIR $APP
+
+# Install app dependencies
+COPY package*.json $APP/
+
+RUN npm install
+
+# Bundle app source in this experiment the dist should be build
+# already  as well as all node modules
+COPY . $APP
+RUN npm run-script test-headless
+
+

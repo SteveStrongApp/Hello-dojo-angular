@@ -1,6 +1,6 @@
 #!/bin/bash
 
-STACK_NAME=${1}-service
+STACK_NAME=${1}
 ECR_REPOSITORY_NAME=$(aws cloudformation describe-stacks --stack-name ${STACK_NAME} --query "Stacks[0].Outputs[?OutputKey=='RepositoryName'].OutputValue" --output text)
 ECR_REPOSITORY_IMAGE_URI=$(aws ecr describe-repositories --query 'repositories[?Name=="${ECR_REPOSITORY_NAME}"].repositoryUri' --output text )
 

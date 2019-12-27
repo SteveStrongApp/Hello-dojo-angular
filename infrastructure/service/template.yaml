@@ -8,11 +8,9 @@ Parameters:
     Type: String
     Description: The url of a docker image that contains the application process that
       will handle the traffic for this service.
-    Default: ''
   ServiceName:
     Type: String
-    Description: A name for the service.
-    Default: hello-dojo-service
+    Description: A name for the ECS service.
   ContainerPort:
     Type: Number
     Default: 80
@@ -56,7 +54,6 @@ Parameters:
 
 Conditions:
   HasCustomRole: !Not [ !Equals [!Ref 'Role', ''] ]
-  HasImageUrl: !Not [ !Equals [!Ref 'ImageUrl', ''] ]
 
 Mappings:
   # Hard values for the subnet masks. These masks define
@@ -84,27 +81,6 @@ Mappings:
     PrivateTwo:
       CIDR: '10.0.3.0/24'
 Resources:
-
-  ECR:
-    Type: AWS::ECR::Repository
-    Properties:
-      RepositoryName: !Sub '${AWS::StackName}'
-      RepositoryPolicyText:
-        Version: '2008-10-17'
-        Statement:
-          - Sid: AllowPushPull
-            Effect: Allow
-            Principal:
-              AWS:
-                - !Sub 'arn:aws:iam::${AWS::AccountId}:root'
-            Action:
-              - ecr:GetDownloadUrlForLayer
-              - ecr:BatchGetImage
-              - ecr:BatchCheckLayerAvailability
-              - ecr:PutImage
-              - ecr:InitiateLayerUpload
-              - ecr:UploadLayerPart
-              - ecr:CompleteLayerUpload
 
   # VPC in which containers will be networked.
   # It has two public subnets, and two private subnets.
@@ -369,6 +345,7 @@ Resources:
                   - 'ec2:Describe*'
                   - 'ec2:DetachNetworkInterface'
 
+
                   # Rules which allow ECS to update load balancers on your behalf
                   # with the information sabout how to send traffic to your containers
                   - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
@@ -404,6 +381,7 @@ Resources:
                   # Allow the ECS tasks to upload logs to CloudWatch
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
+                  - 'logs:DescribeLogGroups'
                 Resource: '*'
 
   LogGroup:
@@ -414,7 +392,6 @@ Resources:
   # The task definition. This is a simple metadata description of what
   # container to run, and what resource requirements it has.
   TaskDefinition:
-    Condition: HasImageUrl
     Type: AWS::ECS::TaskDefinition
     Properties:
       Family: !Ref 'ServiceName'
@@ -447,7 +424,6 @@ Resources:
   # copies of a type of task, and gather up their logs and metrics, as well
   # as monitor the number of running tasks and replace any that have crashed
   Service:
-    Condition: HasImageUrl
     Type: AWS::ECS::Service
     DependsOn: LoadBalancerRule
     Properties:
@@ -506,16 +482,7 @@ Resources:
 
 
 Outputs:
-  RepositoryName:
-    Description: The name of the ECR repository housing the docker images for the service
-    Value: !Ref ECR
   DNSName:
     Description: The DNSName of the public loadbalancer
     Value: !GetAtt PublicLoadBalancer.DNSName
-  ECSClusterName:
-    Description: The name of the ECS Cluster
-    Value: !Ref ECSCluster
-  ECSServiceName:
-    Condition: HasImageUrl
-    Description: The name of the ECS Service
-    Value: !GetAtt Service.Name
+
