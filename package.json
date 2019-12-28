@@ -18,7 +18,6 @@
     "aws:cfm:get-url": "./infrastructure/scripts/get_loadbalancer_url.sh",
     "aws:cfm:teardown-pipeline": "./infrastructure/scripts/remove_pipeline_stack.sh",
     "aws:cfm:teardown-app": "./infrastructure/scripts/remove_application_stack.sh"
-
   },
   "private": true,
   "dependencies": {
