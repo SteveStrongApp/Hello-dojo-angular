@@ -17,6 +17,9 @@ Parameters:
     Type: String
     Description: The DockerFile from the target applciation repo responsible for packaging the applciation and uploading to ECR
     Default: ./Dockerfile-package
+  TemplateFile:
+    Type: String
+    Description: The IaC template file located in S3.  Must be preceeded with bucketname/
 
 Resources:
   ECR:
@@ -78,8 +81,14 @@ Resources:
                   - logs:DeleteLogGroup
                 Resource:
                   - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group*"
-
-              - Effect: Allow
+              - Sid: awss3iactemplatefile
+                Effect: Allow
+                Action:
+                  - s3:Get*
+                Resource:
+                  - !Sub "arn:aws:s3:::${TemplateFile}"
+              - Sid: awss3sourceartifact
+                Effect: Allow
                 Action:
                   - s3:Get*
                   - s3:List*
@@ -278,6 +287,11 @@ Resources:
       Name: !Sub "${ApplicationName}-build"
       Artifacts:
         Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
@@ -292,7 +306,23 @@ Resources:
             Value: !Ref DockerBuildFile
       Source:
         Type: CODEPIPELINE
-        BuildSpec: ./pipeline/build-spec.yaml
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            build:
+              commands:
+                - docker build -f ${DOCKER_FILE}  .
+                - echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} > commithash.txt
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
       ServiceRole: !GetAtt BuildRole.Arn
 
   UnitTestProject:
@@ -301,6 +331,11 @@ Resources:
       Name: !Sub "${ApplicationName}-unittest"
       Artifacts:
         Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
@@ -315,7 +350,22 @@ Resources:
             Value: !Ref DockerUnitTestFile
       Source:
         Type: CODEPIPELINE
-        BuildSpec: ./pipeline/unittest-spec.yaml
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            build:
+              commands:
+                - echo "docker build -f ${DOCKER_FILE}  ."
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
       ServiceRole: !GetAtt BuildRole.Arn
 
   PackageProject:
@@ -324,6 +374,11 @@ Resources:
       Name: !Sub "${ApplicationName}-package"
       Artifacts:
         Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
       Environment:
         Type: LINUX_CONTAINER
         ComputeType: BUILD_GENERAL1_SMALL
@@ -341,7 +396,34 @@ Resources:
             Value: !Ref ECR
       Source:
         Type: CODEPIPELINE
-        BuildSpec: ./pipeline/package-spec.yaml
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            pre_build:
+              commands:
+                - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+
+            build:
+              commands:
+                - ECR_REPOSITORY_IMAGE_URI=$(aws ecr describe-repositories --query 'repositories[?Name=="${ECR_REPOSITORY}"].repositoryUri' --output text)
+                - ECR_IMAGE_VERSION=`cat commithash.txt`
+                - docker build -t ${APPLICATION_NAME}:${ECR_IMAGE_VERSION} -f ${DOCKER_FILE} .
+                - docker tag ${APPLICATION_NAME}:${ECR_IMAGE_VERSION} ${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}
+
+            post_build:
+              commands:
+                - docker push ${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}
+                - echo "${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}" > ecr_image.txt
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
       ServiceRole: !GetAtt BuildRole.Arn
 
   DeployProject:
@@ -359,12 +441,25 @@ Resources:
           - Name: APPLICATION_NAME
             Type: PLAINTEXT
             Value: !Ref ApplicationName
-          - Name: ECR_REPOSITORY
+          - Name: TEMPLATE_FILE
             Type: PLAINTEXT
-            Value: !Ref ECR
+            Value: !Ref TemplateFile
       Source:
         Type: CODEPIPELINE
-        BuildSpec: ./pipeline/deploy-spec.yaml
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 10
+              commands:
+                - echo "Downloading ${TEMPLATE_FILE}"
+                - aws s3 cp s3://${TEMPLATE_FILE} ./template.yaml
+
+            build:
+              commands:
+                - ECR_IMAGE=$(cat ecr_image.txt)
+                - aws cloudformation deploy --stack-name ${APPLICATION_NAME} --no-fail-on-empty-changeset --template-file ./template.yaml --capabilities CAPABILITY_IAM --parameter-overrides ServiceName=${APPLICATION_NAME} ImageUrl=${ECR_IMAGE}
       ServiceRole: !GetAtt BuildRole.Arn
 
   ApplicationPipeline:

@@ -1,0 +1,14 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Creates a bucket in S3 intended to hold IaC scripts for deployment.  Deployment scripts can download
+  the templates from this bucket to apply scripts
+
+Resources:
+
+  TemplateBucket:
+    Type: AWS::S3::Bucket
+
+Outputs:
+  IaCTemplateBucketName:
+    Description:  The name of the IaC template bucket
+    Value: !Ref TemplateBucket
