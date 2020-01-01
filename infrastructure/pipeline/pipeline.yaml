@@ -1,0 +1,649 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "A template for creating a deployment pipline applications"
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Description: The application supported by this Pipeline
+  DockerBuildFile:
+    Type: String
+    Description: The DockerFile from the target applciation repo responsible for building/compiling/linting the applciation
+    Default: ./Dockerfile-make
+  DockerQualityScanFile:
+    Type: String
+    Description: The DockerFile from the target applciation repo responsible for code quality scanning the applciation
+    Default: ./Dockerfile-qualityscan
+  DockerUnitTestFile:
+    Type: String
+    Description: The DockerFile from the target applciation repo responsible for unittesting the applciation
+    Default: ./Dockerfile-unittest
+  DockerPackageFile:
+    Type: String
+    Description: The DockerFile from the target applciation repo responsible for packaging the applciation and uploading to ECR
+    Default: ./Dockerfile-package
+  TemplateBucket:
+    Type: String
+    Description: The IaC template file located in S3.
+  VpcId:
+    Type: String
+  Subnet1:
+    Type: String
+  Subnet2:
+    Type: String
+  PrivateSubnet1:
+    Type: String
+  PrivateSubnet2:
+    Type: String
+
+Resources:
+  ECR:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Ref ApplicationName
+      RepositoryPolicyText:
+        Version: "2008-10-17"
+        Statement:
+          - Sid: AllowPushPull
+            Effect: Allow
+            Principal:
+              AWS:
+                - !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action:
+              - ecr:GetDownloadUrlForLayer
+              - ecr:BatchGetImage
+              - ecr:BatchCheckLayerAvailability
+              - ecr:PutImage
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+
+  SourceBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      VersioningConfiguration:
+        Status: Enabled
+
+  BuildRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-codebuild-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          Effect: Allow
+          Principal:
+            Service: codebuild.amazonaws.com
+          Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CodeBuildPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Sid: awslog
+                Effect: Allow
+                Action:
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - logs:DescribeLogGroups
+                  - logs:DeleteLogGroup
+                Resource:
+                  - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group*"
+              - Sid: awss3sourceartifact
+                Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                  - s3:Put*
+                  - s3:DeleteObject
+                Resource:
+                  - !Sub "arn:aws:s3:::${ArtifactBucket}"
+                  - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
+                  - !Sub "arn:aws:s3:::${SourceBucket}"
+                  - !Sub "arn:aws:s3:::${SourceBucket}/*"
+                  - !Sub "arn:aws:s3:::${TemplateBucket}"
+                  - !Sub "arn:aws:s3:::${TemplateBucket}/*"
+              - Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:SetStackPolicy
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:DescribeStacks
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:List*
+                  - cloudformation:Describe*
+                  - cloudformation:Get*
+                Resource:
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationName}"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${ApplicationName}/*"
+                  - !Sub "arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31"
+              - Sid: awsiam
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PassRole
+                  - iam:DeleteRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:CreatePolicy
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${ApplicationName}*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${ApplicationName}*"
+              - Sid: cloudwatchevents
+                Effect: Allow
+                Action:
+                  - events:DescribeRule
+                  - events:PutRule
+                  - events:RemoveTargets
+                  - events:PutTargets
+                  - events:DeleteRule
+                Resource:
+                  - !Sub "arn:aws:events:${AWS::Region}:${AWS::AccountId}:rule/*"
+              - Sid: awsecr
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:CompleteLayerUpload
+                  - ecr:DescribeRepositories
+                  - ecr:GetAuthorizationToken
+                  - ecr:InitiateLayerUpload
+                  - ecr:PutImage
+                  - ecr:UploadLayerPart
+                Resource:
+                  - '*'
+              - Sid: awsec2
+                Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:AttachInternetGateway
+                  - ec2:CreateInternetGateway
+                  - ec2:DeleteInternetGateway
+                  - ec2:DescribeInternetGateways
+                  - ec2:DetachInternetGateway
+                  - ec2:CreateVpc
+                  - ec2:DeleteVpc
+                  - ec2:DescribeVpcs
+                  - ec2:ModifyVpcAttribute
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeAccountAttributes
+                  - ec2:DescribeSubnets
+                  - ec2:CreateSubnet
+                  - ec2:DeleteSubnet
+                  - ec2:CreateSecurityGroup
+                  - ec2:DeleteSecurityGroup
+                  - ec2:DescribeSecurityGroups
+                  - ec2:AssociateRouteTable
+                  - ec2:CreateRouteTable
+                  - ec2:DescribeRouteTables
+                  - ec2:DeleteRouteTable
+                  - ec2:DisassociateRouteTable
+                  - ec2:RevokeSecurityGroupIngress
+                  - ec2:ModifySubnetAttribute
+                  - ec2:CreateRoute
+                  - ec2:DeleteRoute
+                  - ec2:allocateAddress
+                  - ec2:describeAddresses
+                  - ec2:releaseAddress
+                  - ec2:CreateNatGateway
+                  - ec2:DeleteNatGateway
+                  - ec2:DescribeNatGateways
+                Resource:
+                  - '*'
+              - Sid: awselb
+                Effect: Allow
+                Action:
+                  - elasticloadbalancing:CreateLoadBalancer
+                  - elasticloadbalancing:DeleteLoadBalancer
+                  - elasticloadbalancing:DescribeTargetGroups
+                  - elasticloadbalancing:CreateTargetGroup
+                  - elasticloadbalancing:DeleteTargetGroup
+                  - elasticloadbalancing:DescribeLoadBalancers
+                  - elasticloadbalancing:ModifyLoadBalancerAttributes
+                  - elasticloadbalancing:CreateListener
+                  - elasticloadbalancing:DeleteListener
+                  - elasticloadbalancing:DescribeListeners
+                  - elasticloadbalancing:CreateRule
+                  - elasticloadbalancing:DeleteRule
+                  - elasticloadbalancing:DescribeRules
+                Resource:
+                  - '*'
+              - Sid: awsecs
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:DeleteCluster
+                  - ecs:DescribeClusters
+                  - ecs:RegisterTaskDefinition
+                  - ecs:DeregisterTaskDefinition
+                  - ecs:CreateService
+                  - ecs:DeleteService
+                  - ecs:DescribeServices
+                  - ecs:UpdateService
+                Resource:
+                  - '*'
+
+  PipelineServiceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${AWS::StackName}-codepipeline-role"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - codepipeline.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        - PolicyName: codepipeline-policy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - codebuild:StartBuild
+                  - codebuild:BatchGetBuilds
+                Resource:
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ApplicationName}-build"
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ApplicationName}-qualityscan"
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ApplicationName}-unittest"
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ApplicationName}-package"
+                  - !Sub "arn:aws:codebuild:${AWS::Region}:${AWS::AccountId}:project/${ApplicationName}-deploy"
+              - Effect: Allow
+                Action:
+                  - s3:Get*
+                  - s3:List*
+                  - s3:Put*
+                Resource:
+                  - !Sub "arn:aws:s3:::${ArtifactBucket}"
+                  - !Sub "arn:aws:s3:::${ArtifactBucket}/*"
+                  - !Sub "arn:aws:s3:::${SourceBucket}"
+                  - !Sub "arn:aws:s3:::${SourceBucket}/*"
+                  - !Sub "arn:aws:s3:::${TemplateBucket}"
+                  - !Sub "arn:aws:s3:::${TemplateBucket}/*"
+              - Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PassRole
+                  - iam:DeleteRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:CreatePolicy
+                Resource:
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${AWS::StackName}*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${AWS::StackName}*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:role/${ApplicationName}*"
+                  - !Sub "arn:aws:iam::${AWS::AccountId}:policy/${ApplicationName}*"
+
+  BuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ApplicationName}-build"
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APPLICATION_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: DOCKER_FILE
+            Type: PLAINTEXT
+            Value: !Ref DockerBuildFile
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            build:
+              commands:
+                - echo ${CODEBUILD_RESOLVED_SOURCE_VERSION} > commithash.txt
+                - for i in $(seq 1 5); do [ $i -gt 1 ] && sleep 15; echo "Attempting build ${i} of 5" && docker build -f ${DOCKER_FILE} . && s=0 && break || s=$?; done; (exit $s)
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
+      ServiceRole: !GetAtt BuildRole.Arn
+
+  QualityScanProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ApplicationName}-qualityscan"
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APPLICATION_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: DOCKER_FILE
+            Type: PLAINTEXT
+            Value: !Ref DockerQualityScanFile
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            build:
+              commands:
+                - echo "docker build -f ${DOCKER_FILE}  ."
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
+      ServiceRole: !GetAtt BuildRole.Arn
+
+  UnitTestProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ApplicationName}-unittest"
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APPLICATION_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: DOCKER_FILE
+            Type: PLAINTEXT
+            Value: !Ref DockerUnitTestFile
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            build:
+              commands:
+                - echo "docker build -f ${DOCKER_FILE}  ."
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
+      ServiceRole: !GetAtt BuildRole.Arn
+
+  PackageProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ApplicationName}-package"
+      Artifacts:
+        Type: CODEPIPELINE
+      Cache:
+        Location: LOCAL
+        Modes:
+          - LOCAL_DOCKER_LAYER_CACHE
+        Type: LOCAL
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APPLICATION_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: DOCKER_FILE
+            Type: PLAINTEXT
+            Value: !Ref DockerPackageFile
+          - Name: ECR_REPOSITORY
+            Type: PLAINTEXT
+            Value: !Ref ECR
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+
+            install:
+              runtime-versions:
+                docker: 18
+
+            pre_build:
+              commands:
+                - $(aws ecr get-login --no-include-email --region $AWS_DEFAULT_REGION)
+
+            build:
+              commands:
+                - ECR_REPOSITORY_IMAGE_URI=$(aws ecr describe-repositories --query 'repositories[?Name=="${ECR_REPOSITORY}"].repositoryUri' --output text)
+                - ECR_IMAGE_VERSION=`cat commithash.txt`
+                - for i in $(seq 1 5); do [ $i -gt 1 ] && sleep 15; echo "Attempting build ${i} of 5" && docker build -t ${APPLICATION_NAME}:${ECR_IMAGE_VERSION} -f ${DOCKER_FILE} . && s=0 && break || s=$?; done; (exit $s)
+                - docker tag ${APPLICATION_NAME}:${ECR_IMAGE_VERSION} ${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}
+
+            post_build:
+              commands:
+                - docker push ${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}
+                - echo "${ECR_REPOSITORY_IMAGE_URI}:${ECR_IMAGE_VERSION}" > ecr_image.txt
+
+          artifacts:
+            files:
+              - '**/*'
+          type: zip
+      ServiceRole: !GetAtt BuildRole.Arn
+
+  DeployProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: !Sub "${ApplicationName}-deploy"
+      Artifacts:
+        Type: CODEPIPELINE
+      Environment:
+        Type: LINUX_CONTAINER
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:1.0
+        PrivilegedMode: true
+        EnvironmentVariables:
+          - Name: APPLICATION_NAME
+            Type: PLAINTEXT
+            Value: !Ref ApplicationName
+          - Name: TEMPLATE_BUCKET
+            Type: PLAINTEXT
+            Value: !Ref TemplateBucket
+          - Name: VPC_ID
+            Type: PLAINTEXT
+            Value: !Ref VpcId
+          - Name: SUBNET_1
+            Type: PLAINTEXT
+            Value: !Ref Subnet1
+          - Name: SUBNET_2
+            Type: PLAINTEXT
+            Value: !Ref Subnet2
+          - Name: PRIVATE_SUBNET_1
+            Type: PLAINTEXT
+            Value: !Ref PrivateSubnet1
+          - Name: PRIVATE_SUBNET_2
+            Type: PLAINTEXT
+            Value: !Ref PrivateSubnet2
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                nodejs: 10
+
+            build:
+              commands:
+                - ECR_IMAGE=$(cat ecr_image.txt)
+                - aws cloudformation deploy --stack-name ${APPLICATION_NAME} --no-fail-on-empty-changeset --template-file ${CODEBUILD_SRC_DIR_TemplateCode}/cluster.yaml --capabilities CAPABILITY_IAM --parameter-overrides ServiceName=${APPLICATION_NAME} ImageUrl=${ECR_IMAGE} VpcId=${VPC_ID} Subnet1=${SUBNET_1} Subnet2=${SUBNET_2} PrivateSubnet1=${PRIVATE_SUBNET_1} PrivateSubnet2=${PRIVATE_SUBNET_2} TemplateBucket=${TEMPLATE_BUCKET}
+      ServiceRole: !GetAtt BuildRole.Arn
+
+  ApplicationPipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: !Sub "${AWS::StackName}"
+      RoleArn: !GetAtt PipelineServiceRole.Arn
+      ArtifactStore:
+        Location: !Ref ArtifactBucket
+        Type: S3
+      Stages:
+        - Name: Source
+          Actions:
+            - Name: Appication
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: "1"
+              Configuration:
+                S3Bucket: !Ref SourceBucket
+                S3ObjectKey: dist.zip
+              OutputArtifacts:
+                - Name: SourceCode
+              RunOrder: 1
+            - Name: Templates
+              ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: S3
+                Version: "1"
+              Configuration:
+                S3Bucket: !Ref TemplateBucket
+                S3ObjectKey: templates.zip
+              OutputArtifacts:
+                - Name: TemplateCode
+              RunOrder: 1
+        - Name: Build
+          Actions:
+            - Name: !Ref ApplicationName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref BuildProject
+              InputArtifacts:
+                - Name: SourceCode
+              OutputArtifacts:
+                - Name: BuildArtifact
+        - Name: QualityScan
+          Actions:
+            - Name: !Ref ApplicationName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref QualityScanProject
+              InputArtifacts:
+                - Name: BuildArtifact
+              OutputArtifacts:
+                - Name: QualityScanArtifact
+        - Name: UnitTest
+          Actions:
+            - Name: !Ref ApplicationName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref UnitTestProject
+              InputArtifacts:
+                - Name: QualityScanArtifact
+              OutputArtifacts:
+                - Name: UnitTestArtifact
+        - Name: Package
+          Actions:
+            - Name: !Ref ApplicationName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref PackageProject
+              InputArtifacts:
+                - Name: UnitTestArtifact
+              OutputArtifacts:
+                - Name: PackageArtifact
+        - Name: Deploy
+          Actions:
+            - Name: !Ref ApplicationName
+              ActionTypeId:
+                Category: Build
+                Owner: AWS
+                Provider: CodeBuild
+                Version: 1
+              Configuration:
+                ProjectName: !Ref DeployProject
+                PrimarySource: PackageArtifact
+              InputArtifacts:
+                - Name: PackageArtifact
+                - Name: TemplateCode
+              OutputArtifacts:
+                - Name: DeployArtifact
+
+Outputs:
+  RepositoryName:
+    Description: The name of the ECR repository housing the docker images for the application
+    Value: !Ref ECR
+  SourceBucketName:
+    Description: The name of the S3 Bucket containing the source code
+    Value: !Ref SourceBucket
+  ArtifactBucketName:
+    Description: The name of the S3 bucket containing the pipeline artifacts
+    Value: !Ref ArtifactBucket

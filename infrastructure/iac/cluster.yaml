@@ -1,0 +1,112 @@
+Description: >
+  Provisions an ECS Cluster
+
+Parameters:
+  ServiceName:
+    Type: String
+  VpcId:
+    Description: The target VPC for this deployment
+    Type: String
+  Subnet1:
+    Type: String
+  Subnet2:
+    Type: String
+  PrivateSubnet1:
+    Type: String
+  PrivateSubnet2:
+    Type: String
+  ClusterSize:
+    Type: Number
+    Default: 1
+  Code1:
+    Type: String
+    Default: latest
+  ImageUrl:
+    Type: String
+  TemplateBucket:
+    Type: String
+    Description: >
+      S3 Bucket used for nested templates
+
+Resources:
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Ref AWS::StackName
+
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: [ecs.amazonaws.com]
+            Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: ecs-service
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  # Rules which allow ECS to attach network interfaces to instances
+                  # on your behalf in order for awsvpc networking mode to work right
+                  - 'ec2:AttachNetworkInterface'
+                  - 'ec2:CreateNetworkInterface'
+                  - 'ec2:CreateNetworkInterfacePermission'
+                  - 'ec2:DeleteNetworkInterface'
+                  - 'ec2:DeleteNetworkInterfacePermission'
+                  - 'ec2:Describe*'
+                  - 'ec2:DetachNetworkInterface'
+
+
+                  # Rules which allow ECS to update load balancers on your behalf
+                  # with the information sabout how to send traffic to your containers
+                  - 'elasticloadbalancing:DeregisterInstancesFromLoadBalancer'
+                  - 'elasticloadbalancing:DeregisterTargets'
+                  - 'elasticloadbalancing:Describe*'
+                  - 'elasticloadbalancing:RegisterInstancesWithLoadBalancer'
+                  - 'elasticloadbalancing:RegisterTargets'
+                Resource: '*'
+
+  SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: !Sub ${ServiceName}-hosts
+      SecurityGroupIngress:
+        - SourceSecurityGroupId: !GetAtt LoadBalancer.Outputs.SecurityGroup
+          IpProtocol: -1
+      VpcId: !Ref VpcId
+
+  LoadBalancer:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${TemplateBucket}/load_balancer.yaml
+      Parameters:
+        Subnet1 : !Ref Subnet1
+        Subnet2 : !Ref Subnet2
+        VpcId: !Ref VpcId
+        ServiceName: !Ref ServiceName
+
+  Service:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub https://s3.amazonaws.com/${TemplateBucket}/service.yaml
+      Parameters:
+        Cluster: !Ref Cluster
+        LoadBalancer: !GetAtt LoadBalancer.Outputs.LoadBalancerArn
+        LoadBalancerListener: !GetAtt LoadBalancer.Outputs.LoadBalancerListenerArn
+        PrivateSubnet1 : !Ref PrivateSubnet1
+        PrivateSubnet2 : !Ref PrivateSubnet2
+        VpcId: !Ref VpcId
+        ImageUrl: !Ref ImageUrl
+        ServiceName: !Ref ServiceName
+        SecurityGroupId: !GetAtt LoadBalancer.Outputs.SecurityGroup
+
+Outputs:
+  ClusterName:
+    Value: !Ref Cluster
+  ServiceUrl:
+    Value: !GetAtt LoadBalancer.Outputs.ServiceUrl

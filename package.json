@@ -10,7 +10,14 @@
     "test-forever": "ng test --watch=true --browsers=ChromeHeadless",
     "test": "ng test",
     "lint": "ng lint",
-    "e2e": "ng e2e"
+    "e2e": "ng e2e",
+    "aws:cfm:bootstrap": "./infrastructure/scripts/bootstrap.sh",
+    "aws:cfm:create-pipeline": "./infrastructure/scripts/create-pipeline.sh",
+    "aws:s3:push-source": "./infrastructure/scripts/push_source.sh",
+    "aws:cfm:get-url": "./infrastructure/scripts/get_loadbalancer_url.sh",
+    "aws:cfm:teardown-pipeline": "./infrastructure/scripts/remove_pipeline_stack.sh",
+    "aws:cfm:teardown-app": "./infrastructure/scripts/remove_application_stack.sh",
+    "aws:cfm:teardown-bootstrap": "./infrastructure/scripts/remove_bootstrap_stack.sh"
   },
   "private": true,
   "dependencies": {
